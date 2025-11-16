@@ -1,0 +1,7 @@
+aiogram
+pydantic-settings
+pydantic
+tortoise-orm[asyncpg]
+kurigram
+tgcrypto
+python-dotenv
