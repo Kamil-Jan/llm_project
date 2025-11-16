@@ -22,6 +22,11 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    yandex_folder_id: str = ""
+    yandex_api_key: str = ""
+
+    openai_api_key: str = ""
+
     @validator("default_reminder_times")
     def parse_reminder_times(cls, v: str) -> List[str]:
         """Parse comma-separated reminder times."""
