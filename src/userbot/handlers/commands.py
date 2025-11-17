@@ -63,6 +63,10 @@ class CommandHandlers:
                 return
             ################################
 
+            if event_data.get('result') == 'BAD' or event_data.get('message') is None:
+                await self.message_manager.create_answer(message, event_data.get('message', 'Лучше не создавать событие в это время'))
+                return
+
             try:
                 event = await self.event_service.create_event(
                     chat_id=chat_id,

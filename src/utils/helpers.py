@@ -96,6 +96,46 @@ def format_event_message(
     return "\n".join(lines)
 
 
+def parse_reminder_time(time_str: str) -> int:
+    """
+    Парсинг строки времени напоминания в минуты.
+    
+    Поддерживаемые форматы:
+    - "15m" или "15min" -> 15 минут
+    - "1h" или "1hour" -> 60 минут
+    - "1d" или "1day" -> 1440 минут (24 часа)
+    
+    Args:
+        time_str: Строка времени (например, "15m", "1h")
+        
+    Returns:
+        Количество минут
+        
+    Raises:
+        ValueError: Если формат строки неверный
+    """
+    time_str = time_str.strip().lower()
+    
+    # Паттерн для парсинга: число + единица измерения
+    match = re.match(r'(\d+)\s*(m|min|minutes?|h|hour|hours?|d|day|days?)', time_str)
+    
+    if not match:
+        raise ValueError(f"Invalid reminder time format: {time_str}")
+    
+    value = int(match.group(1))
+    unit = match.group(2)
+    
+    # Конвертация в минуты
+    if unit in ('m', 'min', 'minute', 'minutes'):
+        return value
+    elif unit in ('h', 'hour', 'hours'):
+        return value * 60
+    elif unit in ('d', 'day', 'days'):
+        return value * 1440  # 24 * 60
+    else:
+        raise ValueError(f"Unknown time unit: {unit}")
+
+
 def format_time_remaining(target_datetime: datetime) -> str:
     """Format time remaining until target datetime."""
     now = datetime.utcnow()

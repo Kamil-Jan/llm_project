@@ -93,13 +93,17 @@ class MessageManager:
     async def create_error_message(self, message: Message, error_text: str):
         await self._send_reply(message, error_text, 10)
 
+    async def create_answer(self, message: Message, error_text: str):
+        await self._send_reply(message, error_text, -1)
+
     async def _send_reply(self, message: Message, reply_text: str, delete_delay_seconds: int) -> None:
         try:
             reply = await message.reply(reply_text, parse_mode=ParseMode.MARKDOWN)
-            if reply:
+            if reply and delete_delay_seconds > 0:
                 asyncio.create_task(self._delete_message_after_delay(reply, delete_delay_seconds))
         except Exception as e:
             logger.error(f"Failed to send error reply: {e}")
+
 
     async def _delete_message_after_delay(self, message: Message, delay_seconds: int) -> None:
         try:

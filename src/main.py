@@ -11,6 +11,7 @@ from .config.settings import settings
 from .config.database import init_db, close_db
 from .services.service import Service
 from .services.ai_service import AiService
+from .services.search_service import SearchService
 from .services.event_service import EventService
 from .services.scheduler_service import SchedulerService
 from .services.calendar_service import CalendarService
@@ -41,7 +42,10 @@ class Application:
             self.calendar_service = CalendarService()
             self.services.append(self.calendar_service)
 
-            self.ai_service = AiService()
+            self.search_service = SearchService()
+            self.services.append(self.search_service)
+
+            self.ai_service = AiService(search_service=self.search_service)
             self.services.append(self.ai_service)
 
             self.event_service = EventService()
