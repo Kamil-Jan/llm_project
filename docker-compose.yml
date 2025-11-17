@@ -48,12 +48,16 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
       - YANDEX_FOLDER_ID=${YANDEX_FOLDER_ID}
       - YANDEX_API_KEY=${YANDEX_API_KEY}
+      - GOOGLE_CALENDAR_CREDENTIALS_PATH=${GOOGLE_CALENDAR_CREDENTIALS_PATH:-/app/credentials/credentials.json}
+      - GOOGLE_CALENDAR_TOKEN_PATH=${GOOGLE_CALENDAR_TOKEN_PATH:-/app/credentials/token.json}
+      - GOOGLE_CALENDAR_ID=${GOOGLE_CALENDAR_ID:-primary}
       - DEBUG=${DEBUG:-False}
       - TZ=${TIMEZONE}
     volumes:
       - ./src:/app/src:ro
       - ./sessions:/app/sessions
       - ./faiss_index:/app/faiss_index
+      - ./credentials:/app/credentials
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     networks:

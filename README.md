@@ -15,6 +15,11 @@ TODO: описать откуда брать ключи
 bash scripts/auth/setup_auth.sh
 ```
 
+Авторизовываемся в google calendar
+```bash
+bash scripts/calendar/setup_auth.sh
+```
+
 Запускаем докер
 ```bash
 docker-compose up -d

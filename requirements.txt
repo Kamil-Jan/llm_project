@@ -14,3 +14,6 @@ langchain-text-splitters
 faiss-cpu
 openai
 pytz
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
