@@ -65,7 +65,7 @@ class CommandHandlers:
             ####### AI MODEL PARSING #######
             try:
                 logger.info(f"Original message text: '{message.text}'")
-                event_data = await self.ai_service.parse_event_command(message.text, message.from_user.id)
+                event_data = await self.ai_service.parse_event_command(message.text)
             except DateParsingError as e:
                 await self.message_manager.create_error_message(message, f"Could not parse event: {e}")
                 return

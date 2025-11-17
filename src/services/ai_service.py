@@ -62,7 +62,7 @@ class AiService(Service):
 
     async def initialize(self):
         await super().initialize()
-        #await self.load_faiss_index()
+        await self.load_faiss_index()
 
     def _clean_json_response(self, content: str) -> str:
         """
@@ -493,7 +493,7 @@ message может быть пустым
 
         return prompt
 
-    async def parse_event_command(self, command_text: str, user_id: int) -> dict:
+    async def parse_event_command(self, command_text: str) -> dict:
         await self.update_database(force=False)
 
         try:
@@ -520,38 +520,27 @@ message может быть пустым
             if not reminder_times:
                 reminder_times = list(owner_settings.default_reminder_times)
 
-            test_event_data = {
-                'event_name': 'Test Event',
-                'description': 'Test Description',
-                'event_datetime': datetime.now(pytz.UTC),
-                'end_datetime': None,
+            parsed_data = await self._ai_parse_datetime_and_name(text, timezone_name, timezone)
+
+            event_datetime = self._validate_and_convert_datetime(parsed_data.get('start_datetime'), timezone)
+            end_datetime = None
+            if parsed_data.get('end_datetime'):
+                end_datetime = self._validate_and_convert_datetime(parsed_data.get('end_datetime'), timezone)
+
+            event_name = parsed_data.get('event_name', 'Untitled Event')
+
+            event_data = {
+                'event_name': event_name,
+                'description': parsed_data.get('description', ""),
+                'event_datetime': event_datetime,
+                'end_datetime': end_datetime,
                 'reminder_times': reminder_times,
-                'timezone': timezone_name,
-                'result': 'OK',
-                'message': 'Test Message',
+                'timezone': timezone_name
             }
-            return test_event_data
-            # parsed_data = await self._ai_parse_datetime_and_name(text, timezone_name, timezone)
 
-            # event_datetime = self._validate_and_convert_datetime(parsed_data.get('start_datetime'), timezone)
-            # end_datetime = None
-            # if parsed_data.get('end_datetime'):
-            #     end_datetime = self._validate_and_convert_datetime(parsed_data.get('end_datetime'), timezone)
+            logger.info(f"Event data: {event_data}")
 
-            # event_name = parsed_data.get('event_name', 'Untitled Event')
-
-            # event_data = {
-            #     'event_name': event_name,
-            #     'description': parsed_data.get('description', ""),
-            #     'event_datetime': event_datetime,
-            #     'end_datetime': end_datetime,
-            #     'reminder_times': reminder_times,
-            #     'timezone': timezone_name
-            # }
-
-            # logger.info(f"Event data: {event_data}")
-
-            # return await self.process_event_with_astro_context(event_data)
+            return await self.process_event_with_astro_context(event_data)
 
         except Exception as e:
             self.logger.error(f"Failed to parse event command with AI: {e}")
