@@ -14,6 +14,7 @@ from .services.ai_service import AiService
 from .services.search_service import SearchService
 from .services.event_service import EventService
 from .services.scheduler_service import SchedulerService
+from .services.user_settings_service import UserSettingsService
 from .services.calendar_service import CalendarService
 from .utils.exceptions import BaseError
 
@@ -31,7 +32,7 @@ class Application:
 
     async def initialize_services(self):
         try:
-            logger.info("Initializing telegram bot services...")
+            logger.info("Initializing application services...")
 
             logger.info("Initializing database...")
             await init_db()
@@ -42,20 +43,35 @@ class Application:
             self.calendar_service = CalendarService()
             self.services.append(self.calendar_service)
 
+            self.user_settings_service = UserSettingsService()
+            self.services.append(self.user_settings_service)
+
             self.search_service = SearchService()
             self.services.append(self.search_service)
 
-            self.ai_service = AiService(search_service=self.search_service)
+            self.ai_service = AiService(
+                search_service=self.search_service,
+                user_settings_service=self.user_settings_service
+            )
             self.services.append(self.ai_service)
 
-            self.event_service = EventService()
+            self.event_service = EventService(
+                user_settings_service=self.user_settings_service
+            )
             self.services.append(self.event_service)
 
-            self.user_bot = UserBot(ai_service=self.ai_service, event_service=self.event_service)
+            self.user_bot = UserBot(
+                ai_service=self.ai_service,
+                event_service=self.event_service,
+                user_settings_service=self.user_settings_service
+            )
             self.services.append(self.user_bot)
 
             # bot should be last
-            self.bot = TelegramBot()
+            self.bot = TelegramBot(
+                user_settings_service=self.user_settings_service,
+                event_service=self.event_service,
+            )
             self.services.append(self.bot)
 
             for service in self.services:

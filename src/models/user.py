@@ -9,6 +9,7 @@ class UserSettings(Model):
     timezone = fields.CharField(max_length=50, default="UTC")
     default_reminder_times = fields.JSONField(default=lambda: ["15m", "1h"], description="Default reminder times")
     date_format = fields.CharField(max_length=20, default="%Y-%m-%d %H:%M")
+    birthday = fields.DateField(null=True)
 
     # Calendar settings
     # calendar_sync_enabled = fields.BooleanField(default=True)

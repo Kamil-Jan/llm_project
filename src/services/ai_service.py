@@ -1,7 +1,7 @@
 import json
 import pytz
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -14,6 +14,7 @@ from ..models import AstroDocument
 from ..utils.logger import setup_logger
 from .search_service import SearchService
 from .service import Service
+from .user_settings_service import UserSettingsService
 
 logger = setup_logger(__name__)
 
@@ -27,7 +28,7 @@ class OpenRouterEmbeddings(Embeddings):
             base_url=base_url
         )
         self.model = model
-    
+
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         response = self.client.embeddings.create(
             model=self.model,
@@ -35,7 +36,7 @@ class OpenRouterEmbeddings(Embeddings):
             encoding_format="float"
         )
         return [item.embedding for item in response.data]
-    
+
     def embed_query(self, text: str) -> List[float]:
         response = self.client.embeddings.create(
             model=self.model,
@@ -46,14 +47,14 @@ class OpenRouterEmbeddings(Embeddings):
 
 
 class AiService(Service):
-    def __init__(self, search_service: SearchService):
+    def __init__(self, search_service: SearchService, user_settings_service: UserSettingsService):
         super().__init__(logger)
         self.search_service = search_service
+        self.user_settings_service = user_settings_service
         self.faiss_index_path = "faiss_index"
         self.vector_store = None
         self.chunk_size = 1000
         self.chunk_overlap = 200
-        self.timezone = pytz.timezone(settings.timezone)
         self.llm_client = OpenAI(
             api_key=settings.openai_api_key,
             base_url="https://openrouter.ai/api/v1"
@@ -62,23 +63,23 @@ class AiService(Service):
     async def initialize(self):
         await super().initialize()
         await self.load_faiss_index()
-    
+
     def _clean_json_response(self, content: str) -> str:
         """
         Очищает ответ LLM от markdown форматирования
         Удаляет ```json и ``` блоки, если они есть
         """
         content = content.strip()
-        
+
         # Удаляем markdown блоки
         if content.startswith("```json"):
             content = content[7:]  # Убираем ```json
         elif content.startswith("```"):
             content = content[3:]  # Убираем ```
-        
+
         if content.endswith("```"):
             content = content[:-3]  # Убираем закрывающие ```
-        
+
         return content.strip()
 
     async def update_database(self, force: bool = False):
@@ -122,28 +123,28 @@ class AiService(Service):
     async def load_faiss_index(self):
         """Загрузка FAISS индекса из файла."""
         import os
-        
+
         try:
             if not os.path.exists(self.faiss_index_path):
                 self.logger.warning(f"FAISS index not found at {self.faiss_index_path}, will create on first update")
                 return
-            
+
             self.logger.info(f"Loading FAISS index from {self.faiss_index_path}")
-            
+
             embeddings = OpenRouterEmbeddings(
                 api_key=settings.openai_api_key,
                 model="qwen/qwen3-embedding-8b",
                 base_url="https://openrouter.ai/api/v1"
             )
-            
+
             self.vector_store = FAISS.load_local(
                 self.faiss_index_path,
                 embeddings,
                 allow_dangerous_deserialization=True
             )
-            
+
             self.logger.info("FAISS index loaded successfully")
-            
+
         except Exception as e:
             self.logger.error(f"Failed to load FAISS index: {e}")
             self.vector_store = None
@@ -151,29 +152,29 @@ class AiService(Service):
     def _split_documents_to_chunks(self, documents: List[Document]) -> List[Document]:
         """Разбиение документов на чанки с перекрытием."""
         self.logger.info(f"Splitting {len(documents)} documents into chunks (size={self.chunk_size}, overlap={self.chunk_overlap})")
-        
+
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=self.chunk_size,
             chunk_overlap=self.chunk_overlap,
             length_function=len,
             separators=["\n\n", "\n", " ", ""]
         )
-        
+
         chunks = text_splitter.split_documents(documents)
         self.logger.info(f"Created {len(chunks)} chunks from {len(documents)} documents")
-        
+
         return chunks
 
     async def _create_faiss_index(self):
         try:
             documents = await AstroDocument.all().order_by('-created_at')
-            
+
             if not documents:
                 self.logger.warning("No documents found for FAISS indexing")
                 return
-            
+
             self.logger.info(f"Creating FAISS index from {len(documents)} documents")
-            
+
             langchain_docs = [
                 Document(
                     page_content=doc.content,
@@ -184,26 +185,26 @@ class AiService(Service):
                 )
                 for doc in documents
             ]
-            
+
             chunks = self._split_documents_to_chunks(langchain_docs)
-            
+
             for i, chunk in enumerate(chunks):
                 chunk.metadata["chunk_id"] = i
                 chunk.metadata["chunk_index"] = i
-            
+
             self.logger.info(f"Creating embeddings for {len(chunks)} chunks...")
-            
+
             embeddings = OpenRouterEmbeddings(
                 api_key=settings.openai_api_key,
                 model="qwen/qwen3-embedding-8b",
                 base_url="https://openrouter.ai/api/v1"
             )
-            
+
             self.vector_store = FAISS.from_documents(chunks, embeddings)
             self.vector_store.save_local(self.faiss_index_path)
-            
+
             self.logger.info(f"FAISS index with {len(chunks)} chunks saved to {self.faiss_index_path}")
-            
+
         except Exception as e:
             self.logger.error(f"Failed to create FAISS index: {e}")
             raise
@@ -212,26 +213,37 @@ class AiService(Service):
         if not self.vector_store:
             self.logger.warning("FAISS index not loaded, cannot search")
             return []
-        
+
         try:
             results = self.vector_store.similarity_search(query, k=k)
-            
+
             self.logger.info(f"Found {len(results)} similar chunks for query")
             for i, doc in enumerate(results, 1):
                 self.logger.debug(
                     f"Result {i}: doc_id={doc.metadata.get('doc_id')}, "
                     f"chunk_id={doc.metadata.get('chunk_id')}"
                 )
-            
+
             return results
-            
+
         except Exception as e:
             self.logger.error(f"Failed to search in FAISS index: {e}")
             return []
 
-    async def _ai_parse_datetime_and_name(self, text: str) -> Dict[str, Any]:
+    async def _get_owner_settings_with_timezone(self) -> Tuple["UserSettings", str, pytz.BaseTzInfo]:
+        owner_settings = await self.user_settings_service.get_owner_settings()
+        timezone_name = owner_settings.timezone or settings.timezone
+        timezone = pytz.timezone(timezone_name)
+        return owner_settings, timezone_name, timezone
+
+    async def _ai_parse_datetime_and_name(
+        self,
+        text: str,
+        timezone_name: str,
+        timezone: pytz.BaseTzInfo
+    ) -> Dict[str, Any]:
         """Использование LLM для парсинга даты, времени и названия события."""
-        
+
         system_prompt = """Ты - ассистент для парсинга дат и времени. Твоя задача - извлекать информацию о событии из текста на естественном языке.
 
 Текущий часовой пояс: {timezone}
@@ -266,9 +278,9 @@ class AiService(Service):
 
 Возвращай только JSON объект, ничего больше."""
 
-        current_time = datetime.now(self.timezone)
+        current_time = datetime.now(timezone)
         formatted_system_prompt = system_prompt.format(
-            timezone=settings.timezone,
+            timezone=timezone_name,
             current_time=current_time.strftime("%Y-%m-%d %H:%M:%S %Z")
         )
 
@@ -285,14 +297,14 @@ class AiService(Service):
 
             content = response.choices[0].message.content
             self.logger.info(f"AI response: {content}")
-            
+
             # Очищаем ответ от markdown форматирования
             cleaned_content = self._clean_json_response(content)
             parsed_data = json.loads(cleaned_content)
-            
+
             if 'start_datetime' not in parsed_data:
                 raise ValueError("AI response missing start_datetime")
-            
+
             return parsed_data
 
         except json.JSONDecodeError as e:
@@ -302,21 +314,21 @@ class AiService(Service):
             self.logger.error(f"LLM API error: {e}")
             raise ValueError(f"AI parsing failed: {e}")
 
-    def _validate_and_convert_datetime(self, datetime_str: str) -> datetime:
+    def _validate_and_convert_datetime(self, datetime_str: str, timezone: pytz.BaseTzInfo) -> datetime:
         """Валидация и конвертация строки datetime в timezone-aware объект."""
         if not datetime_str or datetime_str.strip() == "":
             self.logger.warning("Empty datetime string, using current time")
-            now = datetime.now(self.timezone)
+            now = datetime.now(timezone)
             return now.astimezone(pytz.UTC)
-        
+
         try:
             dt = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
-            
+
             if dt.tzinfo is None:
-                dt = self.timezone.localize(dt)
-            
+                dt = timezone.localize(dt)
+
             return dt.astimezone(pytz.UTC)
-            
+
         except Exception as e:
             self.logger.error(f"Failed to validate datetime '{datetime_str}': {e}")
             raise ValueError(f"Invalid datetime format: {datetime_str}")
@@ -324,7 +336,7 @@ class AiService(Service):
     def _parse_reminder_times(self, reminder_str: str) -> List[int]:
         """Парсинг времени напоминаний из строки."""
         from ..utils.helpers import parse_reminder_time
-        
+
         reminder_times = []
         self.logger.info(f"Reminder string: {reminder_str}")
         if reminder_str is None or len(reminder_str) == 0:
@@ -343,38 +355,38 @@ class AiService(Service):
 
     async def process_event_with_astro_context(self, event_data: dict) -> dict:
         self.logger.info(f"Processing event with astro context: {event_data.get('event_name')}")
-        
+
         try:
             # Формируем запрос для поиска астрологического контекста
             event_datetime = event_data['event_datetime']
             event_name = event_data['event_name']
-            
+
             # Форматируем дату для поиска
             event_date_str = event_datetime.strftime('%d %B %Y')
-            
+
             # Создаем поисковый запрос
             search_query = f"Астрологический прогноз на {event_date_str}. Событие: {event_name}"
             self.logger.info(f"Searching astro context with query: {search_query}")
-            
+
             # Ищем релевантные чанки в FAISS
             relevant_chunks = self.search_similar_chunks(search_query, k=5)
-            
+
             if not relevant_chunks:
                 self.logger.warning("No astro context found, returning event data as is")
                 event_data['result'] = "OK"
                 event_data['message'] = "Астрологический прогноз на этот день не найден"
                 return event_data
-            
+
             # Формируем контекст из найденных чанков
             context_parts = []
             for i, chunk in enumerate(relevant_chunks, 1):
                 context_parts.append(f"[Источник {i}]:\n{chunk.page_content}")
-            
+
             context = "\n\n".join(context_parts)
-            
+
             # Создаем промпт для астрологического анализа
             astro_prompt = self._create_astro_analysis_prompt(event_data, context)
-            
+
             # Вызываем LLM для анализа
             self.logger.info("Requesting astro analysis from LLM...")
             response = self.llm_client.chat.completions.create(
@@ -385,24 +397,24 @@ class AiService(Service):
                 temperature=0.3,
                 max_tokens=10000
             )
-            
+
             astro_response = response.choices[0].message.content
             self.logger.info(f"Received astro analysis: {astro_response}...")
-            
+
             # Очищаем ответ от markdown форматирования и парсим JSON
             cleaned_response = self._clean_json_response(astro_response)
             astro_analysis = json.loads(cleaned_response)
-            
+
             event_data['result'] = astro_analysis.get('result', 'OK')
             if event_data['result'] == 'OK':
                 event_data['message'] = f"🔮 Астрологический совет:\n{astro_analysis.get('message', '')}"
             else:
                 event_data['message'] = f"🔮 Астрологический совет:\n{astro_analysis.get('message', '')}"
-            
+
             self.logger.info(f"Event data: {event_data}")
 
             return event_data
-            
+
         except Exception as e:
             self.logger.error(f"Failed to process astro context: {e}")
             event_data['result'] = "OK"
@@ -414,27 +426,29 @@ class AiService(Service):
                 event_data['description'] = f"{original_description}\n\n🔮 Астрологический совет:\n{astro_analysis}"
             else:
                 event_data['description'] = f"🔮 Астрологический совет:\n{astro_analysis}"
-            
+
             return event_data
-            
+
         except Exception as e:
             self.logger.error(f"Failed to process astro context: {e}")
             # В случае ошибки возвращаем оригинальные данные
             return event_data
-    
+
     def _create_astro_analysis_prompt(self, event_data: dict, astro_context: str) -> str:
         """Создание промпта для астрологического анализа события."""
-        
+
         event_datetime = event_data['event_datetime']
         event_name = event_data['event_name']
         event_description = event_data.get('description', '')
-        
+        timezone_name = event_data.get('timezone', settings.timezone)
+        timezone = pytz.timezone(timezone_name)
+
         # Форматируем дату и время
-        local_datetime = event_datetime.astimezone(self.timezone)
+        local_datetime = event_datetime.astimezone(timezone)
         date_str = local_datetime.strftime('%d %B %Y')
         time_str = local_datetime.strftime('%H:%M')
         weekday_str = local_datetime.strftime('%A')
-        
+
         prompt = f"""Ты — профессиональный астролог. На основе предоставленного астрологического контекста дай краткий совет о планируемом событии.
 
 ИНФОРМАЦИЯ О СОБЫТИИ:
@@ -471,7 +485,7 @@ message может быть пустым
 Примеры:
 - {{"result": "OK", "message": "Астрологический совет: это хорошее время для этого события"}}
 - {{"result": "BAD", "message": "Согласно гороскопу, неделя с 3 по 9 ноября 2025 года для знака Водолей не описана,
-    но для знака Скорпион эта неделя — время мудрости и заботы о себе, рекомендуется слушать своё сердце и не усложнять задачи. 
+    но для знака Скорпион эта неделя — время мудрости и заботы о себе, рекомендуется слушать своё сердце и не усложнять задачи.
     Это может говорить о том, что сейчас не самое благоприятное время для важных встреч, требующих концентрации и принятия решений.
     Напутствие: попробуйте перенести встречу на более благоприятное время, например, на следующую неделю."}}
 
@@ -484,12 +498,15 @@ message может быть пустым
 
         try:
             self.logger.info(f"Parsing command text with AI: '{command_text}'")
-            
+
             text = command_text.strip()
             if text.startswith('++event'):
                 text = text[7:].strip()
 
             self.logger.info(f"Text after removing ++event prefix: '{text}'")
+
+            # TODO somewhere here you can fetch owner's birthday and use it to calculate the best time for the event
+            owner_settings, timezone_name, timezone = await self._get_owner_settings_with_timezone()
 
             reminder_times = []
             if '--remind' in text:
@@ -500,13 +517,16 @@ message может быть пустым
                     reminder_str = parts[1].strip()
                     reminder_times = self._parse_reminder_times(reminder_str)
 
-            parsed_data = await self._ai_parse_datetime_and_name(text)
-            
-            event_datetime = self._validate_and_convert_datetime(parsed_data.get('start_datetime'))
+            if not reminder_times:
+                reminder_times = list(owner_settings.default_reminder_times)
+
+            parsed_data = await self._ai_parse_datetime_and_name(text, timezone_name, timezone)
+
+            event_datetime = self._validate_and_convert_datetime(parsed_data.get('start_datetime'), timezone)
             end_datetime = None
             if parsed_data.get('end_datetime'):
-                end_datetime = self._validate_and_convert_datetime(parsed_data.get('end_datetime'))
-            
+                end_datetime = self._validate_and_convert_datetime(parsed_data.get('end_datetime'), timezone)
+
             event_name = parsed_data.get('event_name', 'Untitled Event')
 
             event_data = {
@@ -515,11 +535,11 @@ message может быть пустым
                 'event_datetime': event_datetime,
                 'end_datetime': end_datetime,
                 'reminder_times': reminder_times,
-                'timezone': settings.timezone
+                'timezone': timezone_name
             }
 
             logger.info(f"Event data: {event_data}")
-            
+
             return await self.process_event_with_astro_context(event_data)
 
         except Exception as e:
