@@ -258,7 +258,7 @@ class CalendarService(Service):
             return False
 
     async def sync_event(self, event: Event) -> bool:
-         if event.calendar_event_id:
+        if event.calendar_event_id:
             success = await self.update_event(event)
             if success:
                 try:
