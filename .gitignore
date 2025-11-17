@@ -52,6 +52,11 @@ sessions/
 *.session
 *.session-journal
 
+# Google Calendar credentials
+credentials/
+*.credentials.json
+*.token.json
+
 # Database
 *.db
 *.sqlite

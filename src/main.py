@@ -56,7 +56,8 @@ class Application:
             self.services.append(self.ai_service)
 
             self.event_service = EventService(
-                user_settings_service=self.user_settings_service
+                user_settings_service=self.user_settings_service,
+                calendar_service=self.calendar_service,
             )
             self.services.append(self.event_service)
 

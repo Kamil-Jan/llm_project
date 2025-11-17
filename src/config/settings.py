@@ -27,6 +27,10 @@ class Settings(BaseSettings):
 
     openai_api_key: str = ""
 
+    google_calendar_credentials_path: str = ""
+    google_calendar_token_path: str = ""
+    google_calendar_id: str = "primary"
+
     @validator("default_reminder_times")
     def parse_reminder_times(cls, v: str) -> List[str]:
         """Parse comma-separated reminder times."""

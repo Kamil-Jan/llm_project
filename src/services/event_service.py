@@ -3,6 +3,7 @@ from typing import List, Optional, Dict, Any
 from tortoise.expressions import Q
 
 from .service import Service
+from .calendar_service import CalendarService
 from ..models import Event
 from ..config.settings import settings
 from ..utils.exceptions import EventError, DatabaseError
@@ -14,9 +15,10 @@ logger = setup_logger(__name__)
 
 
 class EventService(Service):
-    def __init__(self, user_settings_service: UserSettingsService):
+    def __init__(self, user_settings_service: UserSettingsService, calendar_service: CalendarService):
         super().__init__(logger)
         self.user_settings_service = user_settings_service
+        self.calendar_service = calendar_service
 
     async def create_event(
         self,
@@ -50,6 +52,12 @@ class EventService(Service):
             )
 
             logger.info(f"Created event {event.id}: {event.event_name}")
+
+            try:
+                await self.calendar_service.sync_event(event)
+            except Exception as e:
+                logger.warning(f"Failed to sync event {event.id} to Google Calendar: {e}")
+
             return event
 
         except Exception as e:
