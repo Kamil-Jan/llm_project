@@ -5,6 +5,8 @@ from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from ..services.service import Service
+from ..services.user_settings_service import UserSettingsService
+from ..services.event_service import EventService
 from ..config.settings import settings
 from ..utils.logger import setup_logger
 from ..utils.exceptions import TelegramError
@@ -17,8 +19,10 @@ logger = setup_logger(__name__)
 
 
 class TelegramBot(Service):
-    def __init__(self):
+    def __init__(self, user_settings_service: UserSettingsService, event_service: EventService):
         super().__init__(logger)
+        self.user_settings_service = user_settings_service
+        self.event_service = event_service
 
         self.bot: Optional[Bot] = None
         self.dp: Optional[Dispatcher] = None
@@ -35,9 +39,14 @@ class TelegramBot(Service):
             self.bot = Bot(token=settings.telegram_bot_token)
             self.dp = Dispatcher(storage=MemoryStorage())
 
-            self.event_handlers = EventHandlers()
+            self.event_handlers = EventHandlers(
+                user_settings_service=self.user_settings_service,
+                event_service=self.event_service,
+            )
 
-            self.settings_handlers = SettingsHandlers()
+            self.settings_handlers = SettingsHandlers(
+                user_settings_service=self.user_settings_service,
+            )
 
             self.callback_handlers = CallbackHandlers()
 
@@ -112,6 +121,15 @@ class TelegramBot(Service):
         async def settings_callback(callback: CallbackQuery):
             """Handle settings button."""
             await self.settings_handlers.handle_settings_callback(callback)
+
+        @self.dp.message(Command("events"))
+        async def events_command(message: Message):
+            await self.event_handlers.handle_list_events(message, message.from_user, to_answer=True)
+
+        @self.dp.callback_query(F.data.startswith("list_events"))
+        async def settings_callback(callback: CallbackQuery):
+            """Handle settings button."""
+            await self.event_handlers.handle_list_events(callback.message, callback.from_user, to_answer=False)
 
         @self.dp.callback_query()
         async def handle_callbacks(callback: CallbackQuery):

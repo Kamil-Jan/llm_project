@@ -5,7 +5,7 @@ from tortoise.expressions import Q
 from .service import Service
 from ..models import Event, UserSettings
 from ..config.settings import settings
-from ..utils.exceptions import EventError
+from ..utils.exceptions import EventError, DatabaseError
 from ..utils.helpers import is_owner, format_event_message
 from ..utils.logger import setup_logger
 
@@ -63,3 +63,17 @@ class EventService(Service):
             event_datetime=event.event_datetime,
             end_datetime=event.end_datetime
         )
+
+    async def get_user_events(self, user_id: int, active_only: bool = True) -> List[Event]:
+        """Get all events for a user."""
+        try:
+            query = Event.filter(creator_user_id=user_id)
+
+            if active_only:
+                query = query.filter(is_completed=False, is_cancelled=False)
+
+            return await query.order_by('event_datetime').all()
+
+        except Exception as e:
+            logger.error(f"Failed to get events for user {user_id}: {e}")
+            raise DatabaseError(f"Could not retrieve events: {e}")
