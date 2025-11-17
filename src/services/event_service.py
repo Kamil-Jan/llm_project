@@ -3,18 +3,20 @@ from typing import List, Optional, Dict, Any
 from tortoise.expressions import Q
 
 from .service import Service
-from ..models import Event, UserSettings
+from ..models import Event
 from ..config.settings import settings
 from ..utils.exceptions import EventError, DatabaseError
 from ..utils.helpers import is_owner, format_event_message
 from ..utils.logger import setup_logger
+from .user_settings_service import UserSettingsService
 
 logger = setup_logger(__name__)
 
 
 class EventService(Service):
-    def __init__(self):
+    def __init__(self, user_settings_service: UserSettingsService):
         super().__init__(logger)
+        self.user_settings_service = user_settings_service
 
     async def create_event(
         self,
@@ -24,16 +26,15 @@ class EventService(Service):
         message_id: Optional[int] = None
     ) -> Event:
         try:
-            user_settings, _ = await UserSettings.get_or_create(
-                user_id=user_id,
-                defaults={'timezone': settings.timezone}
-            )
+            owner_settings = await self.user_settings_service.get_owner_settings()
 
-            reminder_times = event_data.get('reminder_times') or user_settings.default_reminder_times
+            reminder_times = event_data.get('reminder_times') or owner_settings.default_reminder_times
 
             if reminder_times and isinstance(reminder_times[0], str):
                 from ..utils.helpers import parse_reminder_time
                 reminder_times = [parse_reminder_time(time) for time in reminder_times]
+
+            timezone = event_data.get('timezone') or owner_settings.timezone or settings.timezone
 
             event = await Event.create(
                 chat_id=chat_id,
@@ -43,7 +44,7 @@ class EventService(Service):
                 description=event_data.get('description'),
                 event_datetime=event_data['event_datetime'],
                 end_datetime=event_data.get('end_datetime'),
-                timezone=event_data.get('timezone', settings.timezone),
+                timezone=timezone,
                 reminder_times=reminder_times or [],
                 sent_reminders=[]
             )
@@ -61,7 +62,8 @@ class EventService(Service):
             event_name=event.event_name,
             description=event.description,
             event_datetime=event.event_datetime,
-            end_datetime=event.end_datetime
+            end_datetime=event.end_datetime,
+            timezone=event.timezone
         )
 
     async def get_user_events(self, user_id: int, active_only: bool = True) -> List[Event]:

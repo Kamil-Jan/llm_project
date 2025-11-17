@@ -6,6 +6,7 @@ from ..config.settings import settings
 from ..services.service import Service
 from ..services.ai_service import AiService
 from ..services.event_service import EventService
+from ..services.user_settings_service import UserSettingsService
 from ..utils.exceptions import TelegramError
 from ..utils.logger import setup_logger
 from ..utils.helpers import is_owner
@@ -16,11 +17,17 @@ logger = setup_logger(__name__)
 
 
 class UserBot(Service):
-    def __init__(self, ai_service: AiService, event_service: EventService):
+    def __init__(
+        self,
+        ai_service: AiService,
+        event_service: EventService,
+        user_settings_service: UserSettingsService
+    ):
         super().__init__(logger)
 
         self.ai_service = ai_service
         self.event_service = event_service
+        self.user_settings_service = user_settings_service
 
         self.client: Optional[Client] = None
         self.message_manager: Optional[MessageManager]
@@ -46,6 +53,7 @@ class UserBot(Service):
             self.command_handlers = CommandHandlers(
                 ai_service=self.ai_service,
                 event_service=self.event_service,
+                user_settings_service=self.user_settings_service,
                 message_manager=self.message_manager,
             )
 

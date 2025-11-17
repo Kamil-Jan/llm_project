@@ -65,8 +65,8 @@ class EventHandlers:
                 )
                 return
 
-            user_settings = await self.user_settings_service.get_user_settings(user.id)
-            events_text = self._format_events_list(user_settings.timezone, events)
+            owner_settings = await self.user_settings_service.get_owner_settings()
+            events_text = self._format_events_list(owner_settings.timezone, events)
             await handle_method(
                 events_text,
                 reply_markup=KeyboardBuilder.event_list(events),

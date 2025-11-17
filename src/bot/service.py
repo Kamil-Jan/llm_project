@@ -10,6 +10,7 @@ from ..services.event_service import EventService
 from ..config.settings import settings
 from ..utils.logger import setup_logger
 from ..utils.exceptions import TelegramError
+from ..utils.helpers import is_owner
 from .handlers.settings import SettingsHandlers
 from .handlers.events import EventHandlers
 from .handlers.callbacks import CallbackHandlers
@@ -96,42 +97,94 @@ class TelegramBot(Service):
     def _setup_handlers(self):
         @self.dp.message(Command("start"))
         async def start_command(message: Message):
+            if not await self._ensure_owner_message(message):
+                return
             await self.event_handlers.handle_start(message, message.from_user, to_answer=True)
 
         @self.dp.callback_query(F.data.startswith("main_menu"))
-        async def settings_callback(callback: CallbackQuery):
+        async def main_menu_callback(callback: CallbackQuery):
+            if not await self._ensure_owner_callback(callback):
+                return
             await callback.answer()
             await self.event_handlers.handle_start(callback.message, callback.from_user, to_answer=False)
 
         @self.dp.message(Command("help"))
-        async def start_command(message: Message):
+        async def help_command(message: Message):
+            if not await self._ensure_owner_message(message):
+                return
             await self.event_handlers.handle_help(message, message.from_user, to_answer=True)
 
         @self.dp.callback_query(F.data.startswith("help"))
-        async def settings_callback(callback: CallbackQuery):
+        async def help_callback(callback: CallbackQuery):
+            if not await self._ensure_owner_callback(callback):
+                return
             await callback.answer()
             await self.event_handlers.handle_help(callback.message, callback.from_user, to_answer=False)
 
         @self.dp.message(Command("settings"))
         async def settings_command(message: Message):
-            """Handle /settings command."""
+            if not await self._ensure_owner_message(message):
+                return
             await self.settings_handlers.handle_settings_menu(message)
 
         @self.dp.callback_query(F.data.startswith("settings"))
         async def settings_callback(callback: CallbackQuery):
-            """Handle settings button."""
+            if not await self._ensure_owner_callback(callback):
+                return
             await self.settings_handlers.handle_settings_callback(callback)
 
         @self.dp.message(Command("events"))
         async def events_command(message: Message):
+            if not await self._ensure_owner_message(message):
+                return
             await self.event_handlers.handle_list_events(message, message.from_user, to_answer=True)
 
         @self.dp.callback_query(F.data.startswith("list_events"))
-        async def settings_callback(callback: CallbackQuery):
-            """Handle settings button."""
+        async def list_events_callback(callback: CallbackQuery):
+            if not await self._ensure_owner_callback(callback):
+                return
             await self.event_handlers.handle_list_events(callback.message, callback.from_user, to_answer=False)
+
+        @self.dp.message(Command("set_birthday"))
+        async def set_birthday_command(message: Message):
+            if not await self._ensure_owner_message(message):
+                return
+            await self.settings_handlers.handle_set_birthday_command(message)
+
+        @self.dp.message(Command("set_reminders"))
+        async def set_reminders_command(message: Message):
+            if not await self._ensure_owner_message(message):
+                return
+            await self.settings_handlers.handle_set_reminders_command(message)
+
+        @self.dp.message(Command("set_date_format"))
+        async def set_date_format_command(message: Message):
+            if not await self._ensure_owner_message(message):
+                return
+            await self.settings_handlers.handle_set_date_format_command(message)
 
         @self.dp.callback_query()
         async def handle_callbacks(callback: CallbackQuery):
-            """Handle all callback queries."""
+            if not await self._ensure_owner_callback(callback):
+                return
             await self.callback_handlers.handle_callback(callback)
+
+    async def _ensure_owner_message(self, message: Message) -> bool:
+        user = getattr(message, "from_user", None)
+        user_id = getattr(user, "id", None)
+        if user_id is not None and is_owner(user_id):
+            return True
+
+        logger.warning("Blocked command from non-owner user %s", user_id)
+        await message.answer("🚫 Этот бот доступен только владельцу.")
+        return False
+
+    async def _ensure_owner_callback(self, callback: CallbackQuery) -> bool:
+        user = getattr(callback, "from_user", None)
+        user_id = getattr(user, "id", None)
+        if user_id is not None and is_owner(user_id):
+            return True
+
+        logger.warning("Blocked callback from non-owner user %s", user_id)
+        await callback.answer("🚫 У вас нет доступа к этому боту", show_alert=True)
+        return False

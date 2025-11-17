@@ -92,6 +92,12 @@ class KeyboardBuilder:
             InlineKeyboardButton(text="🌍 Часовой пояс", callback_data="settings_timezone"),
         )
         builder.row(
+            InlineKeyboardButton(text="🗓 Формат даты", callback_data="settings_date_format"),
+        )
+        builder.row(
+            InlineKeyboardButton(text="🎂 День рождения", callback_data="settings_birthday"),
+        )
+        builder.row(
             InlineKeyboardButton(text="🔙 Назад в меню", callback_data="main_menu")
         )
 
@@ -108,17 +114,13 @@ class KeyboardBuilder:
         return builder.as_markup()
 
     def event_list(events: List[Event], page: int = 0, per_page: int = 5) -> InlineKeyboardMarkup:
-        """Build event list keyboard with pagination."""
         builder = InlineKeyboardBuilder()
 
-        # Calculate pagination
         start_idx = page * per_page
         end_idx = min(start_idx + per_page, len(events))
         page_events = events[start_idx:end_idx]
 
-        # Add event buttons
         for event in page_events:
-            # Format event button text
             event_text = f"📅 {event.event_name}"
             if len(event_text) > 30:
                 event_text = event_text[:27] + "..."
@@ -130,7 +132,6 @@ class KeyboardBuilder:
                 )
             )
 
-        # Add pagination buttons
         pagination_buttons = []
 
         if page > 0:
@@ -146,7 +147,6 @@ class KeyboardBuilder:
         if pagination_buttons:
             builder.row(*pagination_buttons)
 
-        # Add back button
         builder.row(
             InlineKeyboardButton(text="🔙 Назад в меню", callback_data="main_menu")
         )

@@ -41,11 +41,13 @@ def format_event_message(
     description: Optional[str],
     event_datetime: datetime,
     end_datetime: Optional[datetime] = None,
-    reminder_times: Optional[List[str]] = None
+    reminder_times: Optional[List[str]] = None,
+    timezone: Optional[str] = None
 ) -> str:
     """Format event message for Telegram."""
     # Convert to local timezone for display
-    local_tz = pytz.timezone(settings.timezone)
+    timezone_name = timezone or settings.timezone
+    local_tz = pytz.timezone(timezone_name)
 
     # Convert event datetime to local timezone
     if event_datetime.tzinfo is None:
@@ -99,32 +101,32 @@ def format_event_message(
 def parse_reminder_time(time_str: str) -> int:
     """
     Парсинг строки времени напоминания в минуты.
-    
+
     Поддерживаемые форматы:
     - "15m" или "15min" -> 15 минут
     - "1h" или "1hour" -> 60 минут
     - "1d" или "1day" -> 1440 минут (24 часа)
-    
+
     Args:
         time_str: Строка времени (например, "15m", "1h")
-        
+
     Returns:
         Количество минут
-        
+
     Raises:
         ValueError: Если формат строки неверный
     """
     time_str = time_str.strip().lower()
-    
+
     # Паттерн для парсинга: число + единица измерения
     match = re.match(r'(\d+)\s*(m|min|minutes?|h|hour|hours?|d|day|days?)', time_str)
-    
+
     if not match:
         raise ValueError(f"Invalid reminder time format: {time_str}")
-    
+
     value = int(match.group(1))
     unit = match.group(2)
-    
+
     # Конвертация в минуты
     if unit in ('m', 'min', 'minute', 'minutes'):
         return value

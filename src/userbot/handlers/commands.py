@@ -4,6 +4,7 @@ from pyrogram.enums import ParseMode
 
 from ...services.ai_service import AiService
 from ...services.event_service import EventService
+from ...services.user_settings_service import UserSettingsService
 from ...utils.logger import setup_logger
 from ...utils.helpers import is_owner, extract_chat_info
 from ...utils.exceptions import DateParsingError, EventError
@@ -13,9 +14,16 @@ logger = setup_logger(__name__)
 
 
 class CommandHandlers:
-    def __init__(self, ai_service: AiService, event_service: EventService, message_manager: MessageManager):
+    def __init__(
+        self,
+        ai_service: AiService,
+        event_service: EventService,
+        user_settings_service: UserSettingsService,
+        message_manager: MessageManager
+    ):
         self.ai_service = ai_service
         self.event_service = event_service
+        self.user_settings_service = user_settings_service
         self.message_manager = message_manager
 
     async def handle_help_command(self, message: Message) -> None:
@@ -57,7 +65,7 @@ class CommandHandlers:
             ####### AI MODEL PARSING #######
             try:
                 logger.info(f"Original message text: '{message.text}'")
-                event_data = await self.ai_service.parse_event_command(message.text)
+                event_data = await self.ai_service.parse_event_command(message.text, message.from_user.id)
             except DateParsingError as e:
                 await self.message_manager.create_error_message(message, f"Could not parse event: {e}")
                 return
@@ -93,7 +101,6 @@ class CommandHandlers:
                 event.message_id = message_id
                 await event.save(update_fields=['message_id'])
 
-                # TODO send message to bot
                 # TODO send notification message
                 # TODO schedule event reminders
                 creator_info = "owner" if is_owner(message.from_user.id) else f"user {message.from_user.id}"
