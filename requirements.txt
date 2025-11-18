@@ -1,4 +1,5 @@
 aiogram
+deepgram-sdk
 pydantic-settings
 pydantic
 tortoise-orm[asyncpg]

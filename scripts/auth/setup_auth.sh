@@ -25,7 +25,7 @@ fi
 # Install authentication dependencies
 echo "📦 Installing authentication dependencies..."
 DIR=$(dirname "$0")
-pip install -r $DIR/requirements.txt
+pip install -r $DIR/requirements.txt --index-url https://pypi.org/simple --trusted-host pypi.org --trusted-host files.pythonhosted.org
 
 if [ $? -ne 0 ]; then
     echo "❌ Failed to install dependencies"

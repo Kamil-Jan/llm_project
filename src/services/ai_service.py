@@ -434,6 +434,48 @@ class AiService(Service):
             # В случае ошибки возвращаем оригинальные данные
             return event_data
 
+    async def _ai_classify_is_event(self, text: str) -> dict:
+        """
+        Классифицирует текст: является ли он запросом на создание события.
+        Возвращает JSON: { "is_event": true/false, "reason": "..." }
+        """
+        prompt = f"""
+    Ты — помощник, который определяет, содержит ли текст запрос на создание события / встречи / задачи.
+
+    Верни JSON строго в формате:
+    {{
+        "is_event": true/false,
+        "reason": "краткое объяснение"
+    }}
+
+    Текст: "{text}"
+
+    Правила:
+    - is_event = true, если пользователь хочет назначить встречу, событие, задачу, напоминание.
+    - is_event = false, если текст — просто разговор, вопрос, приветствие, мнение и т.п.
+    - Если есть даже слабый намёк на “назначить”, “встретиться”, “позвонить”, “записаться”, “через 2 часа ...”, — ставь true.
+    - Всегда возвращай валидный JSON.
+    """
+
+        try:
+            response = self.llm_client.chat.completions.create(
+                model="openai/gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+                max_tokens=200
+            )
+
+            content = response.choices[0].message.content
+            cleaned = self._clean_json_response(content)
+            data = json.loads(cleaned)
+            is_event = bool(data.get("is_event", False))
+            self.logger.info(f"Event classification for '{text}': {is_event}")
+            return is_event
+        except Exception as e:
+            self.logger.error(f"Failed to classify text as event/non-event: {e}")
+            # В случае ошибки классификации лучше ничего не делать, чем ломать логику
+            return False
+
     def _create_astro_analysis_prompt(self, event_data: dict, astro_context: str) -> str:
         """Создание промпта для астрологического анализа события."""
 
@@ -508,6 +550,11 @@ message может быть пустым
                 text = text[7:].strip()
 
             self.logger.info(f"Text after removing ++event prefix: '{text}'")
+
+            is_event = await self._ai_classify_is_event(text)
+            if not is_event:
+                self.logger.info("Text is not classified as event, doing nothing")
+                return None
 
             # TODO somewhere here you can fetch owner's birthday and use it to calculate the best time for the event
             owner_settings, timezone_name, timezone = await self._get_owner_settings_with_timezone()

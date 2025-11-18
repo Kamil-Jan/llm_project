@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     google_calendar_token_path: str = ""
     google_calendar_id: str = "primary"
 
+    deepgram_api_key: str = ""
+
     @validator("default_reminder_times")
     def parse_reminder_times(cls, v: str) -> List[str]:
         """Parse comma-separated reminder times."""
