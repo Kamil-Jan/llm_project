@@ -102,10 +102,10 @@ class CommandHandlers:
                 )
                 return
 
-            try:
-                await message.delete()
-            except Exception as e:
-                logger.warning(f"Could not delete event command message: {e}")
+            #try:
+            #    await message.delete()
+            #except Exception as e:
+            #    logger.warning(f"Could not delete event command message: {e}")
 
             pinned_event_text = self.event_service.generate_pinned_event_message(event)
 
@@ -122,6 +122,14 @@ class CommandHandlers:
                 logger.info(
                     f"Created event '{event.event_name}' in chat {chat_id} by {creator_info}"
                 )
+                if event_data.get('message'):
+                    try:
+                        await self.message_manager.create_answer(
+                            message,
+                            event_data['message']
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not send LLM explanation for good event: {e}")
             else:
                 logger.error("Failed to create event message")
                 await event.delete()

@@ -357,62 +357,47 @@ class AiService(Service):
         self.logger.info(f"Processing event with astro context: {event_data.get('event_name')}")
 
         try:
-            # Формируем запрос для поиска астрологического контекста
             event_datetime = event_data['event_datetime']
             event_name = event_data['event_name']
 
-            # Форматируем дату для поиска
             event_date_str = event_datetime.strftime('%d %B %Y')
-
-            # Создаем поисковый запрос
             search_query = f"Астрологический прогноз на {event_date_str}. Событие: {event_name}"
             self.logger.info(f"Searching astro context with query: {search_query}")
 
-            # Ищем релевантные чанки в FAISS
             relevant_chunks = self.search_similar_chunks(search_query, k=5)
 
             if not relevant_chunks:
-                self.logger.warning("No astro context found, returning event data as is")
+                self.logger.warning("No astro context found, returning fallback message")
                 event_data['result'] = "OK"
                 event_data['message'] = "Астрологический прогноз на этот день не найден"
                 return event_data
 
-            # Формируем контекст из найденных чанков
             context_parts = []
             for i, chunk in enumerate(relevant_chunks, 1):
                 context_parts.append(f"[Источник {i}]:\n{chunk.page_content}")
-
             context = "\n\n".join(context_parts)
 
-            # Создаем промпт для астрологического анализа
             astro_prompt = self._create_astro_analysis_prompt(event_data, context)
 
-            # Вызываем LLM для анализа
             self.logger.info("Requesting astro analysis from LLM...")
             response = self.llm_client.chat.completions.create(
                 model="openai/gpt-4o-mini",
-                messages=[
-                    {"role": "user", "content": astro_prompt}
-                ],
+                messages=[{"role": "user", "content": astro_prompt}],
                 temperature=0.3,
-                max_tokens=10000
+                max_tokens=2000,
             )
 
             astro_response = response.choices[0].message.content
-            self.logger.info(f"Received astro analysis: {astro_response}...")
+            self.logger.info(f"Received astro analysis raw: {astro_response}")
 
-            # Очищаем ответ от markdown форматирования и парсим JSON
             cleaned_response = self._clean_json_response(astro_response)
+            self.logger.info(f"Cleaned astro analysis: {cleaned_response}")
             astro_analysis = json.loads(cleaned_response)
 
             event_data['result'] = astro_analysis.get('result', 'OK')
-            if event_data['result'] == 'OK':
-                event_data['message'] = f"🔮 Астрологический совет:\n{astro_analysis.get('message', '')}"
-            else:
-                event_data['message'] = f"🔮 Астрологический совет:\n{astro_analysis.get('message', '')}"
+            event_data['message'] = "🔮 Астрологический совет:\n" + astro_analysis.get('message', "")
 
-            self.logger.info(f"Event data: {event_data}")
-
+            self.logger.info(f"Final event data with astro: {event_data}")
             return event_data
 
         except Exception as e:
@@ -420,19 +405,7 @@ class AiService(Service):
             event_data['result'] = "OK"
             event_data['message'] = "Астрологический прогноз на этот день не найден"
             return event_data
-            # Пока добавляем анализ в description
-            original_description = event_data.get('description', '')
-            if original_description:
-                event_data['description'] = f"{original_description}\n\n🔮 Астрологический совет:\n{astro_analysis}"
-            else:
-                event_data['description'] = f"🔮 Астрологический совет:\n{astro_analysis}"
 
-            return event_data
-
-        except Exception as e:
-            self.logger.error(f"Failed to process astro context: {e}")
-            # В случае ошибки возвращаем оригинальные данные
-            return event_data
 
     async def _ai_classify_is_event(self, text: str) -> dict:
         """
@@ -533,7 +506,7 @@ message может быть пустым
     но для знака Скорпион эта неделя — время мудрости и заботы о себе, рекомендуется слушать своё сердце и не усложнять задачи.
     Это может говорить о том, что сейчас не самое благоприятное время для важных встреч, требующих концентрации и принятия решений.
     Напутствие: попробуйте перенести встречу на более благоприятное время, например, на следующую неделю."}}
-- {"result": "OK", "message": "Астрологический совет: Завтрашние транзиты выглядят спокойными — даже если день в целом кажется энергически неровным, в вашей личной конфигурации нет напряжённых аспектов, которые могли бы помешать встрече. Влияние планет скорее нейтральное, так что смело назначайте событие: время обещает пройти устойчиво и без неприятных сюрпризов."}
+- {{"result": "OK", "message": "Астрологический совет: Завтрашние транзиты выглядят спокойными — даже если день в целом кажется энергически неровным, в вашей личной конфигурации нет напряжённых аспектов, которые могли бы помешать встрече. Влияние планет скорее нейтральное, так что смело назначайте событие: время обещает пройти устойчиво и без неприятных сюрпризов."}}
 
 """
 
