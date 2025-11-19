@@ -23,6 +23,7 @@ services:
   app:
     build: .
     container_name: project_app
+    user: "0:0"  
     depends_on:
       postgres:
         condition: service_healthy
@@ -51,6 +52,7 @@ services:
       - TZ=${TIMEZONE}
     volumes:
       - ./src:/app/src:ro
+      - project_downloads:/app/src/downloads
       - ./sessions:/app/sessions
       - ./faiss_index:/app/faiss_index
       - ./credentials:/app/credentials
@@ -62,6 +64,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  project_downloads:
     driver: local
 
 networks:
