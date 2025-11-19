@@ -13,6 +13,7 @@ from .services.service import Service
 from .services.ai_service import AiService
 from .services.search_service import SearchService
 from .services.event_service import EventService
+from .services.asr_service import AsrService
 from .services.scheduler_service import SchedulerService
 from .services.user_settings_service import UserSettingsService
 from .services.calendar_service import CalendarService
@@ -29,6 +30,7 @@ class Application:
         self.bot: Optional[TelegramBot] = None
         self.user_bot: Optional[UserBot] = None
         self.services: List[Service] = []
+        self.asr_service: Optional[AsrService] = None
 
     async def initialize_services(self):
         try:
@@ -49,6 +51,9 @@ class Application:
             self.search_service = SearchService()
             self.services.append(self.search_service)
 
+            self.asr_service = AsrService()
+            self.services.append(self.asr_service)
+
             self.ai_service = AiService(
                 search_service=self.search_service,
                 user_settings_service=self.user_settings_service
@@ -64,7 +69,8 @@ class Application:
             self.user_bot = UserBot(
                 ai_service=self.ai_service,
                 event_service=self.event_service,
-                user_settings_service=self.user_settings_service
+                user_settings_service=self.user_settings_service,
+                asr_service=self.asr_service,
             )
             self.services.append(self.user_bot)
 

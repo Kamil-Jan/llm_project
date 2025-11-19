@@ -97,9 +97,6 @@ class UserSettingsService(Service):
 📅 **Формат даты:** {user_settings.date_format}
 🎂 **День рождения:** {birthday_text}
 
-📊 **Интеграция с календарём:**
-TODO
-
 🔕 **Уведомления:**
 • Напоминания: {"✅ Включены" if user_settings.reminder_notifications else "❌ Отключены"}
 • Уведомления о завершении: {"✅ Включены" if user_settings.completion_notifications else "❌ Отключены"}

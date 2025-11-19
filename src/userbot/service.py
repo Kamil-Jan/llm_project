@@ -1,4 +1,7 @@
 from typing import Optional
+from pathlib import Path
+import os
+
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
@@ -6,6 +9,7 @@ from ..config.settings import settings
 from ..services.service import Service
 from ..services.ai_service import AiService
 from ..services.event_service import EventService
+from ..services.asr_service import AsrService
 from ..services.user_settings_service import UserSettingsService
 from ..utils.exceptions import TelegramError
 from ..utils.logger import setup_logger
@@ -21,13 +25,15 @@ class UserBot(Service):
         self,
         ai_service: AiService,
         event_service: EventService,
-        user_settings_service: UserSettingsService
+        user_settings_service: UserSettingsService,
+        asr_service: AsrService
     ):
         super().__init__(logger)
 
         self.ai_service = ai_service
         self.event_service = event_service
         self.user_settings_service = user_settings_service
+        self.asr_service = asr_service
 
         self.client: Optional[Client] = None
         self.message_manager: Optional[MessageManager]
@@ -135,3 +141,69 @@ class UserBot(Service):
 
             except Exception as e:
                 logger.error(f"Error handling other user message: {e}")
+
+        @self.client.on_message(filters.voice & filters.me)
+        async def handle_my_voice(client: Client, message: Message):
+            try:
+                if not is_owner(message.from_user.id):
+                    return
+
+                path_str = await message.download()
+                file_path = Path(path_str)
+
+                try:
+                    transcript = await self.asr_service.transcribe_file(file_path)
+
+                    if not transcript:
+                        await message.reply_text("Не удалось распознать речь 😔 Попробуй ещё раз.")
+                        return
+
+                    logger.info(f"Voice transcript (me): {transcript}")
+
+                    raw_text = f"++event {transcript}"
+
+                    await self.command_handlers._process_event_text(message, raw_text)
+
+                finally:
+                    try:
+                        os.remove(file_path)
+                    except OSError:
+                        pass
+
+            except Exception as e:
+                logger.error(f"Error handling my voice message: {e}")
+                await message.reply_text("❌ Ошибка при обработке голосового сообщения.")
+
+        @self.client.on_message(filters.voice & ~filters.me)
+        async def handle_other_voice(client: Client, message: Message):
+            """Handle voice messages from others in private chats."""
+            try:
+                if message.chat.id <= 0:
+                    return
+                path_str = await message.download()
+                file_path = Path(path_str)
+
+                try:
+                    transcript = await self.asr_service.transcribe_file(file_path)
+
+                    if not transcript:
+                        await message.reply_text("Не удалось распознать речь 😔 Попробуйте ещё раз.")
+                        return
+
+                    logger.info(
+                        f"Voice transcript (other user {message.from_user.id}): {transcript}"
+                    )
+
+                    raw_text = f"++event {transcript}"
+
+                    await self.command_handlers._process_event_text(message, raw_text)
+
+                finally:
+                    try:
+                        os.remove(file_path)
+                    except OSError:
+                        pass
+
+            except Exception as e:
+                logger.error(f"Error handling other user voice message: {e}")
+                await message.reply_text("❌ Ошибка при обработке голосового сообщения.")

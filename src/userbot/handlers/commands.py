@@ -43,7 +43,7 @@ class CommandHandlers:
             logger.error(f"Error handling help command: {e}")
             await self.message_manager.create_error_message(message, "ERROR: Произошла ошибка при отображении справки")
 
-    async def handle_event_command(self, message: Message) -> None:
+    async def _process_event_text(self, message: Message, raw_text: str) -> None:
         try:
             chat_id, chat_title, chat_type = extract_chat_info(message.chat)
 
@@ -52,9 +52,13 @@ class CommandHandlers:
 
             if not is_owner_user:
                 if not is_private_chat:
-                    logger.warning(f"Non-owner {message.from_user.id} tried to create event in non-private chat {chat_id}")
+                    logger.warning(
+                        f"Non-owner {message.from_user.id} tried to create event in non-private chat {chat_id}"
+                    )
                     return
-                logger.info(f"Processing ++event command from non-owner user {message.from_user.id} in private chat {chat_id}")
+                logger.info(
+                    f"Processing ++event command from non-owner user {message.from_user.id} in private chat {chat_id}"
+                )
             else:
                 logger.info(f"Processing ++event command from owner {message.from_user.id}")
 
@@ -64,15 +68,25 @@ class CommandHandlers:
 
             ####### AI MODEL PARSING #######
             try:
-                logger.info(f"Original message text: '{message.text}'")
-                event_data = await self.ai_service.parse_event_command(message.text)
+                logger.info(f"Original event text: '{raw_text}'")
+                event_data = await self.ai_service.parse_event_command(raw_text)
             except DateParsingError as e:
-                await self.message_manager.create_error_message(message, f"Could not parse event: {e}")
+                await self.message_manager.create_error_message(
+                    message,
+                    f"Could not parse event: {e}"
+                )
                 return
             ################################
 
+            if event_data is None:
+                logger.info("AiService returned no event_data (not an event) — skipping")
+                return
+
             if event_data.get('result') == 'BAD' or event_data.get('message') is None:
-                await self.message_manager.create_answer(message, event_data.get('message', 'Лучше не создавать событие в это время'))
+                await self.message_manager.create_answer(
+                    message,
+                    event_data.get('message', 'Лучше не создавать событие в это время')
+                )
                 return
 
             try:
@@ -82,13 +96,16 @@ class CommandHandlers:
                     event_data=event_data
                 )
             except EventError as e:
-                await self.message_manager.create_error_message(message, f"Could not create event: {e}")
+                await self.message_manager.create_error_message(
+                    message,
+                    f"Could not create event: {e}"
+                )
                 return
 
-            try:
-                await message.delete()
-            except Exception as e:
-                logger.warning(f"Could not delete help command message: {e}")
+            #try:
+            #    await message.delete()
+            #except Exception as e:
+            #    logger.warning(f"Could not delete event command message: {e}")
 
             pinned_event_text = self.event_service.generate_pinned_event_message(event)
 
@@ -101,14 +118,32 @@ class CommandHandlers:
                 event.message_id = message_id
                 await event.save(update_fields=['message_id'])
 
-                # TODO send notification message
-                # TODO schedule event reminders
                 creator_info = "owner" if is_owner(message.from_user.id) else f"user {message.from_user.id}"
-                logger.info(f"Created event '{event.event_name}' in chat {chat_id} by {creator_info}")
+                logger.info(
+                    f"Created event '{event.event_name}' in chat {chat_id} by {creator_info}"
+                )
+                if event_data.get('message'):
+                    try:
+                        await self.message_manager.create_answer(
+                            message,
+                            event_data['message']
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not send LLM explanation for good event: {e}")
             else:
                 logger.error("Failed to create event message")
                 await event.delete()
 
         except Exception as e:
-            logger.error(f"Error handling event command: {e}")
-            await self.message_manager.create_error_message(message, "ERROR: Произошла ошибка при создании события")
+            logger.error(f"Error processing event text: {e}")
+            await self.message_manager.create_error_message(
+                message,
+                "ERROR: Произошла ошибка при создании события"
+            )
+
+
+    async def handle_event_command(self, message: Message) -> None:
+        """Обработчик текстовой команды ++event ..."""
+        if not message.text:
+            return
+        await self._process_event_text(message, message.text)
